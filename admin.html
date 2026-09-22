@@ -19,7 +19,6 @@
   .table-wrap { overflow-x: auto; border: 1px solid var(--border); }
   .status-toggle { cursor: pointer; }
   .login-box { max-width: 380px; margin: 60px auto; }
-  #gsiBtn { margin: 12px 0; }
 </style>
 </head>
 <body>
@@ -40,18 +39,36 @@
 
   <div id="banner"></div>
 
-  <!-- LOGIN -->
+  <!-- LOGIN — STEP 1: email + password -->
   <section class="panel login-box" id="loginPanel">
     <h2 class="panel-title">Admin Sign-In</h2>
-    <p style="color:var(--text-muted); font-size:13.5px;">Sign in with your authorized Google account, then enter the admin password.</p>
-    <div id="gsiBtn"></div>
+    <p style="color:var(--text-muted); font-size:13.5px;">Enter your authorized admin email and the admin password. We'll email you a one-time code to confirm it's you.</p>
+    <div class="field">
+      <label class="field-label">Admin Email</label>
+      <input type="email" id="adminEmail" autocomplete="username" />
+    </div>
     <div class="field">
       <label class="field-label">Admin Password</label>
-      <input type="password" id="adminPassword" />
+      <input type="password" id="adminPassword" autocomplete="current-password" />
     </div>
-    <button class="btn btn-primary" id="loginBtn" style="width:100%;" disabled>Sign In</button>
+    <button class="btn btn-primary" id="requestOtpBtn" style="width:100%;">Send Code</button>
     <p style="color:var(--text-faint); font-size:12px; margin-top:14px;">
-      Configure GOOGLE_CLIENT_ID in admin.js, and ADMIN_PASSWORD / ADMIN_EMAILS in Apps Script Script Properties.
+      Configure ADMIN_PASSWORD and ADMIN_EMAILS in Apps Script Script Properties. Codes are sent from the Google account that owns the Apps Script project.
+    </p>
+  </section>
+
+  <!-- LOGIN — STEP 2: one-time code -->
+  <section class="panel login-box" id="otpPanel" style="display:none;">
+    <h2 class="panel-title">Enter Code</h2>
+    <p style="color:var(--text-muted); font-size:13.5px;">We sent a 6-digit code to <strong id="otpEmailDisplay"></strong>. It expires in 5 minutes.</p>
+    <div class="field">
+      <label class="field-label">6-Digit Code</label>
+      <input type="text" id="otpCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="letter-spacing:0.3em; font-family:var(--font-mono); font-size:20px; text-align:center;" />
+    </div>
+    <button class="btn btn-primary" id="verifyOtpBtn" style="width:100%;">Verify &amp; Sign In</button>
+    <button class="btn btn-secondary" id="backToLoginBtn" style="width:100%; margin-top:8px;">Use a different email</button>
+    <p style="color:var(--text-faint); font-size:12px; margin-top:14px;">
+      Didn't get it? Check spam, or <a href="#" id="resendOtpBtn">resend the code</a>.
     </p>
   </section>
 
@@ -88,7 +105,6 @@
 </div>
 
 <script src="i18n.js"></script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="admin.js"></script>
 </body>
 </html>

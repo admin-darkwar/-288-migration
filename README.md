@@ -41,9 +41,14 @@ Flagging these explicitly so you can override any of them:
 6. **Duplicate-check race condition** is handled with `LockService` in
    `Code.gs` so two simultaneous submissions with the same Migration ID
    can't both slip through.
-7. **Admin dual auth** is real: a Google Identity Services sign-in (checked
-   against an email allow-list) *and* a separate admin password (checked
-   server-side against a Script Property, never shipped in frontend code).
+7. **Admin dual auth** is real: an admin password (checked server-side
+   against a Script Property, never shipped in frontend code) *and* a
+   6-digit one-time code emailed to an allow-listed address, valid for 5
+   minutes. Code requests are throttled (5 per email per 10 minutes) to
+   limit abuse. This avoids needing a Google Cloud OAuth client for a
+   free/hobby deployment; if you'd rather use "Sign in with Google" instead
+   of email codes, that's a straightforward swap — ask and I can wire it
+   back in.
 8. **Excel export**: CSV export is built client-side. For a true `.xlsx`,
    the dashboard links admins straight to the underlying Google Sheet
    (they already have access via Google auth) to use File → Download →
@@ -74,10 +79,18 @@ Flagging these explicitly so you can override any of them:
 
 1. In `app.js`, set `CONFIG.API_URL` to the deployment URL from above.
 2. In `admin.js`, set the same `API_URL`, plus:
-   - `GOOGLE_CLIENT_ID` — an OAuth 2.0 Web client ID from
-     [Google Cloud Console](https://console.cloud.google.com/apis/credentials),
-     with your hosting domain added under Authorized JavaScript origins.
    - `SHEET_URL` — the Google Sheet's URL, for the admin's Excel-export shortcut.
+
+No OAuth client setup is needed — admin sign-in is password + emailed
+one-time code. When you run `setup`/first deploy, Apps Script will ask you
+to authorize the "send email" permission (`MailApp`); accept it, since
+that's what delivers the codes.
+
+**Email quota to be aware of:** codes are sent from the Google account that
+owns the Apps Script project. A personal Gmail account gets ~100
+`MailApp` sends per day; a Google Workspace account gets ~1,500/day. Fine
+for an admin team of any realistic size, but worth knowing if you ever
+loop email-based notifications into the same script.
 
 ## Host it for free
 

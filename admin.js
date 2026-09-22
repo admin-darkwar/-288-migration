@@ -4,39 +4,32 @@
    ========================================================================== */
 
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbwZJSbR-IxSYkzYg61ctkb8ZrBKJENvi_x66PPpyZWcm5mgdqpZazDvk5ojt40PblVf/exec",
-  // From Google Cloud Console → APIs & Services → Credentials → OAuth client ID (Web).
-  // Authorized JavaScript origin must include the URL this admin page is hosted at.
-  GOOGLE_CLIENT_ID: "38323520045-iejrbqnelh78rjem4b1mqf4gh9jn1bpu.apps.googleusercontent.com",
+  API_URL: "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE",
   // Fill in with the same Sheet ID used in the Apps Script Script Properties,
   // so "Open Sheet" can jump admins straight to File → Download → Excel.
-  SHEET_URL: "https://docs.google.com/spreadsheets/d/1pf2Uu_rZndv7NsUkkWIgFWC3xQZR3Zvim1o5_FVVws0/edit?pli=1&gid=1636155214#gid=1636155214",
+  SHEET_URL: "PASTE_YOUR_GOOGLE_SHEET_URL_HERE",
 };
 
-let idToken = null;
 let sessionToken = null;
 let allRecords = [];
+let pendingEmail = null; // email currently awaiting OTP verification
 const lang = detectLanguage();
 
 document.addEventListener("DOMContentLoaded", () => {
   buildLangSelect();
   document.getElementById("openSheetBtn").href = CONFIG.SHEET_URL;
-  document.getElementById("loginBtn").addEventListener("click", login);
-  document.getElementById("adminPassword").addEventListener("input", updateLoginBtn);
+  document.getElementById("requestOtpBtn").addEventListener("click", requestOtp);
+  document.getElementById("verifyOtpBtn").addEventListener("click", verifyOtp);
+  document.getElementById("backToLoginBtn").addEventListener("click", backToLogin);
+  document.getElementById("resendOtpBtn").addEventListener("click", (e) => { e.preventDefault(); requestOtp(); });
+  document.getElementById("adminPassword").addEventListener("keydown", (e) => { if (e.key === "Enter") requestOtp(); });
+  document.getElementById("otpCode").addEventListener("keydown", (e) => { if (e.key === "Enter") verifyOtp(); });
   document.getElementById("searchBox").addEventListener("input", renderTable);
   ["filterServer", "filterTarget", "filterType", "filterStatus"].forEach((id) =>
     document.getElementById(id).addEventListener("change", renderTable)
   );
   document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
   document.getElementById("refreshBtn").addEventListener("click", loadData);
-
-  if (window.google && CONFIG.GOOGLE_CLIENT_ID.indexOf("PASTE_YOUR") !== 0) {
-    initGsi();
-  } else {
-    window.addEventListener("load", () => {
-      if (CONFIG.GOOGLE_CLIENT_ID.indexOf("PASTE_YOUR") !== 0) initGsi();
-    });
-  }
 });
 
 function buildLangSelect() {
@@ -48,19 +41,6 @@ function buildLangSelect() {
   });
   sel.value = lang;
   document.documentElement.dir = LANG_META[lang].dir;
-}
-
-function initGsi() {
-  google.accounts.id.initialize({
-    client_id: CONFIG.GOOGLE_CLIENT_ID,
-    callback: (resp) => { idToken = resp.credential; updateLoginBtn(); },
-  });
-  google.accounts.id.renderButton(document.getElementById("gsiBtn"), { theme: "outline", size: "large" });
-}
-
-function updateLoginBtn() {
-  const pwd = document.getElementById("adminPassword").value;
-  document.getElementById("loginBtn").disabled = !(idToken && pwd);
 }
 
 async function callApi(payload) {
@@ -76,28 +56,77 @@ function showBanner(text, kind) {
   document.getElementById("banner").innerHTML = `<div class="banner banner-${kind || "error"}">${text}</div>`;
 }
 
-async function login() {
+async function requestOtp() {
+  const email = document.getElementById("adminEmail").value.trim();
   const password = document.getElementById("adminPassword").value;
-  const btn = document.getElementById("loginBtn");
+  if (!email || !password) {
+    showBanner("Enter both your admin email and the admin password.");
+    return;
+  }
+  const btn = document.getElementById("requestOtpBtn");
   btn.disabled = true;
-  btn.innerHTML = `<span class="spinner"></span>Signing in…`;
+  const original = btn.textContent;
+  btn.innerHTML = `<span class="spinner"></span>Sending…`;
   try {
-    const resp = await callApi({ action: "adminLogin", idToken, password });
+    const resp = await callApi({ action: "adminRequestOtp", email, password });
     if (resp.ok) {
-      sessionToken = resp.token;
+      pendingEmail = email;
+      document.getElementById("otpEmailDisplay").textContent = email;
       document.getElementById("loginPanel").style.display = "none";
-      document.getElementById("dashboard").style.display = "block";
+      document.getElementById("otpPanel").style.display = "block";
+      document.getElementById("otpCode").value = "";
+      document.getElementById("otpCode").focus();
       document.getElementById("banner").innerHTML = "";
-      await loadData();
+    } else if (resp.error === "invalid_password") {
+      showBanner("Incorrect admin password.");
+    } else if (resp.error === "not_authorized") {
+      showBanner("That email is not on the admin list.");
     } else {
-      showBanner("Sign-in failed: " + (resp.error || "unknown error"));
+      showBanner("Could not send the code: " + (resp.error || "unknown error"));
     }
   } catch (e) {
     showBanner("Could not reach the server. Check API_URL in admin.js.");
   } finally {
     btn.disabled = false;
-    btn.textContent = "Sign In";
+    btn.textContent = original;
   }
+}
+
+async function verifyOtp() {
+  const code = document.getElementById("otpCode").value.trim();
+  if (!code) return;
+  const btn = document.getElementById("verifyOtpBtn");
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.innerHTML = `<span class="spinner"></span>Verifying…`;
+  try {
+    const resp = await callApi({ action: "adminVerifyOtp", email: pendingEmail, code });
+    if (resp.ok) {
+      sessionToken = resp.token;
+      document.getElementById("otpPanel").style.display = "none";
+      document.getElementById("dashboard").style.display = "block";
+      document.getElementById("banner").innerHTML = "";
+      await loadData();
+    } else if (resp.error === "invalid_code") {
+      showBanner("That code is incorrect.");
+    } else if (resp.error === "expired") {
+      showBanner("That code has expired. Request a new one.");
+    } else {
+      showBanner("Could not verify the code: " + (resp.error || "unknown error"));
+    }
+  } catch (e) {
+    showBanner("Could not reach the server. Check API_URL in admin.js.");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+function backToLogin() {
+  pendingEmail = null;
+  document.getElementById("otpPanel").style.display = "none";
+  document.getElementById("loginPanel").style.display = "block";
+  document.getElementById("banner").innerHTML = "";
 }
 
 async function loadData() {

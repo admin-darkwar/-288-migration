@@ -63,7 +63,8 @@ function doPost(e) {
       case "submit": return jsonOut_(handleSubmit_(body));
       case "update": return jsonOut_(handleUpdate_(body));
       case "getForUpdate": return jsonOut_(handleGetForUpdate_(body));
-      case "adminLogin": return jsonOut_(handleAdminLogin_(body));
+      case "adminRequestOtp": return jsonOut_(handleAdminRequestOtp_(body));
+      case "adminVerifyOtp": return jsonOut_(handleAdminVerifyOtp_(body));
       case "adminList": return jsonOut_(handleAdminList_(body));
       case "adminSetStatus": return jsonOut_(handleAdminSetStatus_(body));
       default: return jsonOut_({ ok: false, error: "unknown_action" });
@@ -199,41 +200,68 @@ function rowToRecord_(row) {
 }
 
 // ---------------------------------------------------------------------
-// ADMIN — dual auth: Google Identity token + admin password.
-// The frontend gets a Google ID token via Google Identity Services
-// (see admin.html) and sends it here along with the password. We verify
-// the token's signature/audience via Google's tokeninfo endpoint and
-// check the email against an allow-list, then check the password against
-// a Script Property. A short-lived opaque session token is returned.
+// ADMIN — dual auth: admin password + a one-time code emailed to an
+// allow-listed address. Step 1 (handleAdminRequestOtp_) checks the
+// password and the email allow-list, then emails a 6-digit code that is
+// cached (keyed by email) for 5 minutes — never sent back to the browser.
+// Step 2 (handleAdminVerifyOtp_) checks the submitted code against the
+// cache and, on success, issues a short-lived opaque session token.
+// A per-email request counter throttles repeated code requests.
 // ---------------------------------------------------------------------
-function handleAdminLogin_(p) {
+function handleAdminRequestOtp_(p) {
   const props = PropertiesService.getScriptProperties();
   const adminPassword = props.getProperty("ADMIN_PASSWORD");
-  const allowedEmails = (props.getProperty("ADMIN_EMAILS") || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const allowedEmails = (props.getProperty("ADMIN_EMAILS") || "")
+    .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
   if (!p.password || p.password !== adminPassword) {
     return { ok: false, error: "invalid_password" };
   }
 
-  let email;
-  try {
-    const resp = UrlFetchApp.fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" + encodeURIComponent(p.idToken));
-    const info = JSON.parse(resp.getContentText());
-    email = (info.email || "").toLowerCase();
-    if (!info.email_verified || info.email_verified === "false") {
-      return { ok: false, error: "unverified_email" };
-    }
-  } catch (err) {
-    return { ok: false, error: "invalid_token" };
-  }
-
-  if (allowedEmails.indexOf(email) === -1) {
+  const email = String(p.email || "").trim().toLowerCase();
+  if (!email || allowedEmails.indexOf(email) === -1) {
     return { ok: false, error: "not_authorized" };
   }
 
-  const token = Utilities.getUuid();
   const cache = CacheService.getScriptCache();
-  cache.put("admin_session_" + token, email, 21600); // 6 hours
+
+  // Basic throttle: max 5 code requests per email per 10 minutes.
+  const throttleKey = "otp_count_" + email;
+  const count = Number(cache.get(throttleKey) || 0);
+  if (count >= 5) {
+    return { ok: false, error: "rate_limited" };
+  }
+  cache.put(throttleKey, String(count + 1), 600);
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  cache.put("otp_" + email, code, 300); // 5 minutes
+
+  MailApp.sendEmail({
+    to: email,
+    subject: "Your Server 288 admin sign-in code",
+    body:
+      "Your one-time code is: " + code + "\n\n" +
+      "It expires in 5 minutes. If you did not request this, you can ignore this email.",
+  });
+
+  return { ok: true };
+}
+
+function handleAdminVerifyOtp_(p) {
+  const email = String(p.email || "").trim().toLowerCase();
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("otp_" + email);
+
+  if (!cached) {
+    return { ok: false, error: "expired" };
+  }
+  if (String(p.code || "").trim() !== cached) {
+    return { ok: false, error: "invalid_code" };
+  }
+
+  cache.remove("otp_" + email);
+  const token = Utilities.getUuid();
+  cache.put("admin_session_" + token, email, 21600); // 6 hour session
   return { ok: true, token: token, email: email };
 }
 
