@@ -4,10 +4,10 @@
    ========================================================================== */
 
 const CONFIG = {
-  API_URL: "PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE",
+  API_URL: "https://script.google.com/u/0/home/projects/1kDp4qM-X1aGTkXO_YXTiwUiIuVPPaizGMipfWzLzX_Jz3N5wV1npIZ5B/edit",
   // Fill in with the same Sheet ID used in the Apps Script Script Properties,
   // so "Open Sheet" can jump admins straight to File → Download → Excel.
-  SHEET_URL: "PASTE_YOUR_GOOGLE_SHEET_URL_HERE",
+  SHEET_URL: "https://docs.google.com/spreadsheets/d/1pf2Uu_rZndv7NsUkkWIgFWC3xQZR3Zvim1o5_FVVws0/edit?pli=1&gid=1636155214#gid=1636155214",
 };
 
 let sessionToken = null;
