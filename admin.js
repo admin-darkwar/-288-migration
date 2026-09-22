@@ -4,7 +4,7 @@
    ========================================================================== */
 
 const CONFIG = {
-  API_URL: "https://script.google.com/u/0/home/projects/1kDp4qM-X1aGTkXO_YXTiwUiIuVPPaizGMipfWzLzX_Jz3N5wV1npIZ5B/edit",
+  API_URL: "https://script.google.com/macros/s/AKfycbwZJSbR-IxSYkzYg61ctkb8ZrBKJENvi_x66PPpyZWcm5mgdqpZazDvk5ojt40PblVf/exec",
   // Fill in with the same Sheet ID used in the Apps Script Script Properties,
   // so "Open Sheet" can jump admins straight to File → Download → Excel.
   SHEET_URL: "https://docs.google.com/spreadsheets/d/1pf2Uu_rZndv7NsUkkWIgFWC3xQZR3Zvim1o5_FVVws0/edit?pli=1&gid=1636155214#gid=1636155214",
